@@ -7,8 +7,21 @@ ENCVOL = '/dev/vg_daniel-laptop/rattic_encrypted'
 LUKSVOL = 'rattic_encrypted'
 MOUNTPOINT = '/opt/rattic_encrypted'
 TMPFILE = '/tmp/rkey'
+STARTCMD = ['service', 'mysqld', 'start']
+STOPCMD = ['service', 'mysqld', 'stop']
 
-def unlockdb(password):
+def startdb(password):
+    if not unlockfs(password):
+        return False
+    if not startmysql():
+        return False
+    return True
+
+def startmysql():
+    call(STARTCMD)
+    return True
+
+def unlockfs(password):
     # Get mapped directory
     mapped = os.path.join('/dev/mapper/', LUKSVOL)
 
@@ -51,18 +64,21 @@ def sendform(errormsg=None):
         "    <p><input type=\"submit\" value=\"Unlock\"/></p>"
         "</form>")
 
-class EncUnlock:
-    def index(self, password=None):
+class Setup:
+    def unlock(self, password=None):
         if checkunlock():
             raise cherrypy.HTTPRedirect("/")
         if password is not None:
-            if unlockdb(password):
+            if startdb(password):
                 raise cherrypy.HTTPRedirect("/")
             else:
                 return sendform('Incorrect password.')
         else:
             return sendform()
-    index.exposed = True
+    unlock.exposed = True
 
-cherrypy.quickstart(EncUnlock())
+class AppRoot:
+    setup = Setup()
+
+cherrypy.quickstart(AppRoot())
 
