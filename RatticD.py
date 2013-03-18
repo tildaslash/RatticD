@@ -64,7 +64,7 @@ def sendform(errormsg=None):
         "    <p><input type=\"submit\" value=\"Unlock\"/></p>"
         "</form>")
 
-class Setup:
+class AppRoot:
     def unlock(self, password=None):
         if checkunlock():
             raise cherrypy.HTTPRedirect("/")
@@ -76,9 +76,6 @@ class Setup:
         else:
             return sendform()
     unlock.exposed = True
-
-class AppRoot:
-    setup = Setup()
 
 cherrypy.quickstart(AppRoot())
 
