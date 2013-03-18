@@ -65,6 +65,12 @@ def sendform(errormsg=None):
         "</form>")
 
 class AppRoot:
+    def index(self):
+        if checkunlock():
+            return "Unlocked and running..."
+        else:
+            raise cherrypy.HTTPRedirect("/unlock")
+
     def unlock(self, password=None):
         if checkunlock():
             raise cherrypy.HTTPRedirect("/")
