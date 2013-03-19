@@ -10,20 +10,40 @@ TMPFILE = '/tmp/rkey'
 STARTCMD = ['service', 'mysqld', 'start']
 STOPCMD = ['service', 'mysqld', 'stop']
 
-def startdb(password):
-    if not unlockfs(password):
-        return False
-    if not startmysql():
-        return False
-    return True
+SERVICES = {
+    'mysql': {
+      'mount': [('mysql', '/var/lib/mysql')],
+      'initscript': '/etc/init.d/mysqld',
+    },
+}
 
-def startmysql():
-    call(STARTCMD)
-    return True
 
-def unlockfs(password):
+def _checkmount(mountpoint):
+    return os.path.ismount(mountpoint)
+
+def _domount(device, mountpoint, bind=False):
+    if _checkmount(mountpoint):
+        return True
+
+    if not os.path.exists(mountpoint):
+        os.mkdir(mountpoint)
+    
+    if bind:
+        call(['mount', '--bind', device, mountpoint])
+    else:
+        call(['mount', device, mountpoint])
+
+    return _checkmount(mountpoint)
+
+def _checkdecrypt(clearpath):
+    return os.path.exists(clearpath)
+
+def _dodecrypt(encvol, password, clearvol):
     # Get mapped directory
-    mapped = os.path.join('/dev/mapper/', LUKSVOL)
+    clearpath = os.path.join('/dev/mapper/', clearvol)
+
+    if _checkdecrypt(clearpath):
+        return True
 
     # Write the key to a file
     with open(TMPFILE, 'w') as f:
@@ -31,27 +51,45 @@ def unlockfs(password):
     f.closed
 
     # Open the encrypted FS
-    call(['cryptsetup', '-d', TMPFILE, 'luksOpen', ENCVOL, LUKSVOL])
-    if not os.path.exists(mapped):
-        return False
-
+    call(['cryptsetup', '-d', TMPFILE, 'luksOpen', encvol, clearvol])
     # Erase and remove temp file
     with open(TMPFILE, 'w') as f:
         f.write('OVERWRITETHEPASSWORDWITHSOMETHINGELSE')
     f.closed
     os.unlink(TMPFILE)
+    
+    return _checkdecrypt(self, path)
 
-    # Make sure the mountpoint exists
-    if not os.path.exists(MOUNTPOINT):
-        os.mkdir(MOUNTPOINT)
+def _checkservice(service):
+    rtn = call([service['initscript'], 'status'])
+    if rtn == 0:
+      return True
+    return False
 
-    # Mount the filesystem
-    call(['mount', mapped, MOUNTPOINT])
-    return True
+def _startservice(service, mountpoint):
+    if _checkservice(service):
+        return True
 
-def checkunlock():
-    mapped = os.path.join('/dev/mapper/', LUKSVOL)
-    return os.path.exists(mapped)
+    for mp in service['mount']
+        location = os.path.join(mountpoint, mp[0])
+        if _domount(location, mp[1], bind=True) == False:
+            return False
+    rtn = call([service['initscript'], 'start'])
+    return _checkservice(service)
+
+def startdb(password):
+    # Get mapped directory
+    clearpath = os.path.join('/dev/mapper/', LUKSVOL)
+
+    if not _dodecrypt(ENCVOL, password, LUKSVOL):
+        return False
+
+    if not _domount(clearpath, MOUNTPOINT):
+        return False
+
+    for svc in SERVICES.keys():
+        if not _startservice(SERVICES[svc]):
+            return False
 
 def sendform(errormsg=None):
     return (
@@ -66,13 +104,13 @@ def sendform(errormsg=None):
 
 class AppRoot:
     def index(self):
-        if checkunlock():
+      if startdb(''):
             return "Unlocked and running..."
         else:
             raise cherrypy.HTTPRedirect("/unlock")
 
     def unlock(self, password=None):
-        if checkunlock():
+        if startdb(''):
             raise cherrypy.HTTPRedirect("/")
         if password is not None:
             if startdb(password):
